@@ -1,4 +1,4 @@
-package com.example.psfchatgpt;
+package com.psf;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
