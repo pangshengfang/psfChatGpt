@@ -20,9 +20,9 @@ public class ChatGptClientImpl implements ChatGptClient {
 
     private final HttpService httpService;
 
-    private final static String HOST = "https://api.openai.com/v1/";
+    private final TokenClient tokenClient;
 
-    private final static String TOKEN = "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";
+    private final static String HOST = "https://api.openai.com/v1/";
 
     @Override
     public OpenAICommonResponse<ModelResponse> listModels() {
@@ -48,13 +48,13 @@ public class ChatGptClientImpl implements ChatGptClient {
 
     private Map<String, String> generateGetHeaders() {
         Map<String, String> header = new HashMap<>();
-        header.put("Authorization", "Bearer " + TOKEN);
+        header.put("Authorization", "Bearer " + tokenClient.getToken());
         return header;
     }
 
     private Map<String, String> generatePostHeaders() {
         Map<String, String> header = new HashMap<>();
-        header.put("Authorization", "Bearer " + TOKEN);
+        header.put("Authorization", "Bearer " + tokenClient.getToken());
         header.put("Content-Type" ,"application/json");
         return header;
     }
