@@ -1,9 +1,11 @@
 package com.psf.core.service;
 
-import com.psf.common.response.ModelResponse;
-import com.psf.common.response.OpenAICommonResponse;
-import com.psf.common.response.PermissionResponse;
+import com.psf.common.constant.dto.PeopleNameDTO;
+import com.psf.common.constant.enums.ErrorCodeMsg;
+import com.psf.common.request.MessageRequest;
+import com.psf.common.response.*;
 import com.psf.core.client.ChatGptClient;
+import com.psf.core.client.ChatRequestTemplate;
 import com.psf.core.persistence.dao.ModelDao;
 import com.psf.core.persistence.dao.PermissionDao;
 import com.psf.core.persistence.entity.ModelEntity;
@@ -14,7 +16,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
@@ -25,7 +30,13 @@ public class AINameServiceImpl implements AINameService {
 
     private final PermissionDao permissionDao;
 
+    private final ChatRequestTemplate template;
+
     private final ModelDao modelDao;
+
+    private final static String DEFAULT_ROLE = "user";
+
+    private final static String DEFAULT_MODEL = "gpt-3.5-turbo";
 
     @Transactional
     @Override
@@ -41,6 +52,17 @@ public class AINameServiceImpl implements AINameService {
             }).collect(Collectors.toList());
             modelDao.save(modelRes2Entity(modelResponse, permissionIds));
         }
+    }
+
+    @Override
+    public List<PeopleNameResponse> getPeopleNames(PeopleNameDTO dto) {
+        MessageRequest message = new MessageRequest();
+        String content = template.generatePeopleNameRequest(dto);
+        message.setRole(DEFAULT_ROLE);
+        message.setContent(content);
+        List<MessageRequest> messageRequests = List.of(message);
+        ChatGptCompletionResponse response = client.createChatCompletion(DEFAULT_MODEL, messageRequests);
+        return translatePeopleName(response);
     }
 
     private void truncateOldModelData() {
@@ -73,5 +95,33 @@ public class AINameServiceImpl implements AINameService {
         entity.setCreatedAt(LocalDateTime.ofEpochSecond(res.getCreated(), 0, ZoneOffset.UTC));
         entity.setPermissionIds(permissionIds);
         return entity;
+    }
+
+    private List<PeopleNameResponse> translatePeopleName(ChatGptCompletionResponse res) {
+        String content = res.getChoices().stream().findFirst().orElseThrow(ErrorCodeMsg.BAD_REQUEST::newException).getMessage().getContent();
+        List<PeopleNameResponse> result = new ArrayList<>();
+        for (int i = 1; i <= template.getNameCount(); i++) {
+            PeopleNameResponse peopleNameResponse = new PeopleNameResponse();
+            Pattern pattern = Pattern.compile(String.format("%d\\.(.*)\\|(.*)\\|(.*)\\|(.*)\\\n", i)); // 使用正则表达式匹配"b"和"e"之间的任意字符
+            Matcher matcher = pattern.matcher(content);
+            if (matcher.find()) {
+                peopleNameResponse.setName(justifyString(matcher.group(1)));
+                peopleNameResponse.setPinyin(justifyString(matcher.group(2)));
+                peopleNameResponse.setInfo(justifyString(matcher.group(3)));
+                peopleNameResponse.setFrom(justifyString(matcher.group(4)));
+                result.add(peopleNameResponse);
+            }
+        }
+        return result;
+    }
+
+    private String justifyString(String str) {
+        if (str.startsWith(" ")) {
+            str = str.substring(1);
+        }
+        if (str.endsWith(" ")) {
+            str = str.substring(0, str.length() - 2);
+        }
+        return str;
     }
 }
